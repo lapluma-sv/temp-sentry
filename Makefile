@@ -1,21 +1,24 @@
 CC      ?= gcc
-CFLAGS  ?= -Wall -Wextra -O2 -g -std=c11 -Iinclude
+CFLAGS  ?= -Wall -Wextra -O2 -g -std=c11
 LDFLAGS ?=
 
+# 三层：hardware 硬件层 / driver 驱动层 / app 应用层
+INCLUDES := -Ihardware -Idriver -Iapp
+
 TARGET  := temp-sentry
-SRCS    := src/main.c src/serial_port.c
+SRCS    := hardware/serial_port.c driver/protocol.c app/sensor.c app/main.c
 OBJS    := $(SRCS:.c=.o)
-DEPS    := $(wildcard include/*.h)
+DEPS    := $(wildcard hardware/*.h driver/*.h app/*.h)
 
 .PHONY: all clean
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(OBJS) $(LDFLAGS)
 
 %.o: %.c $(DEPS)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 clean:
 	rm -f $(OBJS) $(TARGET)

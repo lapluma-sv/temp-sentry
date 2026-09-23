@@ -1,8 +1,6 @@
 #ifndef TEMP_SENTRY_SERIAL_PORT_H
 #define TEMP_SENTRY_SERIAL_PORT_H
 
-#include <stddef.h>
-#include <sys/types.h>
 #include <termios.h>
 
 /* 串口参数，未显式赋值的字段由 serial_open 填默认值 */
@@ -22,13 +20,6 @@ int serial_open(const struct serial_config *cfg);
 
 /* 关闭串口，fd < 0 时直接返回 */
 void serial_close(int fd);
-
-/*
- * 读取串口数据。
- * 返回 >0：实际读到的字节数；返回 0：暂时无数据；返回 -1：出错，
- * errno 为 EAGAIN/EWOULDBLOCK/EINTR 时属于正常情况，可继续循环。
- */
-ssize_t serial_read(int fd, void *buf, size_t len);
 
 /* 波特率数值转换为 termios 的 Bxxx 常量，不支持时返回 (speed_t)-1 */
 speed_t serial_baud_to_speed(int baudrate);

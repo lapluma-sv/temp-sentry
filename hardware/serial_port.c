@@ -149,8 +149,3 @@ void serial_close(int fd)
         close(fd);
     }
 }
-
-ssize_t serial_read(int fd, void *buf, size_t len)
-{
-    return read(fd, buf, len);
-}
