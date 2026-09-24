@@ -5,6 +5,12 @@
 
 /* 数据层：从串口取帧、解析出数值并保存。协议细节都在 protocol 层，这里只管数据 */
 
+/* 越界上报接口：本层只负责判定，具体怎么上报（阶段二走 MQTT publish）由外部注册 */
+typedef void (*sensor_alert_fn)(double value, double low, double high);
+
+/* 注册越界上报回调；传 NULL 表示不上报 */
+void sensor_set_alert_fn(sensor_alert_fn fn);
+
 /* 从串口取数据并解析，内部一直取到没有完整帧为止 */
 void sensor_poll(int fd);
 

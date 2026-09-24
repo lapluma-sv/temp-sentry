@@ -19,6 +19,21 @@ static int    g_has_value;
 static uint64_t g_frames; /* 成功解析的帧数 */
 static uint64_t g_errors; /* 校验失败、长度非法等异常次数 */
 
+/* 判定参数：额定值 60，上下波动 ±2 => 正常范围 [58, 62] */
+static double g_nominal   = 60.0;
+static double g_tolerance = 2.0;
+
+/* 当前是否处于越界状态，用来只在"正常 -> 越界"翻转时上报一次，避免每帧刷屏 */
+static int g_out_of_range;
+
+/* 越界上报回调，由外部（阶段二的 MQTT 层）注册 */
+static sensor_alert_fn g_alert_fn;
+
+void sensor_set_alert_fn(sensor_alert_fn fn)
+{
+    g_alert_fn = fn;
+}
+
 /* 丢掉帧头 A5 A5 之前的垃圾字节；
  * 没有完整帧头时只留末尾那个 A5（可能是帧头的前一半，等下一批数据补齐） */
 static void rx_align(void)
@@ -42,6 +57,24 @@ static void rx_align(void)
     if (start > 0) {
         memmove(g_rx, g_rx + start, (size_t)(g_rx_len - start));
         g_rx_len -= start;
+    }
+}
+
+/* 越界判定：数值不在 [额定值 - 波动, 额定值 + 波动] 内就触发上报。
+ * 只在状态翻转的那一刻上报一次：恢复正常后状态清零，下次越界再报。 */
+static void check_range(void)
+{
+    double low  = g_nominal - g_tolerance;
+    double high = g_nominal + g_tolerance;
+    int bad = (g_value < low || g_value > high);
+
+    if (bad == g_out_of_range) {
+        return; /* 状态没变，不重复上报 */
+    }
+    g_out_of_range = bad;
+
+    if (bad && g_alert_fn != NULL) {
+        g_alert_fn(g_value, low, high);
     }
 }
 
@@ -69,6 +102,8 @@ static void parse_value(const char *msg)
 
     printf("[%s.%03ld] 数值 = %g\n", stamp, ts.tv_nsec / 1000000, g_value);
     fflush(stdout);
+
+    check_range();
 }
 
 void sensor_poll(int fd)

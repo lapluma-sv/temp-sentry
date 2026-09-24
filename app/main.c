@@ -9,10 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
+#include <sys/epoll.h>
 #include <unistd.h>
 
-#define POLL_TIMEOUT_SEC 1 /* MCU 每 1s 发一帧，超时可用于判离线 */
+#define POLL_TIMEOUT_MS  1000 /* MCU 每 1s 发一帧，超时可用于判离线 */
+#define EPOLL_MAX_EVENTS 8
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -31,6 +32,12 @@ static void install_signal_handlers(void)
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+}
+
+/* 越界上报：阶段二在这里 publish 事件到 edge/node01/event，现在先打印占位 */
+static void on_temp_alert(double value, double low, double high)
+{
+    fprintf(stderr, "[越界] 数值 %g 不在 [%g, %g] 内\n", value, low, high);
 }
 
 static void usage(const char *prog)
@@ -63,6 +70,8 @@ int main(int argc, char *argv[])
 
     install_signal_handlers();
 
+    sensor_set_alert_fn(on_temp_alert);
+
     struct serial_config cfg = {
         .device   = device,
         .baudrate = baudrate,
@@ -76,29 +85,48 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    int epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (epfd < 0) {
+        fprintf(stderr, "epoll_create1 失败: %s\n", strerror(errno));
+        serial_close(fd);
+        return 1;
+    }
+
+    /* 串口只注册水平触发：tty 的 poll 实现在边缘触发下容易漏数据 */
+    struct epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.events = EPOLLIN;
+    ev.data.fd = fd;
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
+        fprintf(stderr, "epoll_ctl 注册串口失败: %s\n", strerror(errno));
+        close(epfd);
+        serial_close(fd);
+        return 1;
+    }
+
     printf("开始接收（Ctrl-C 退出）\n");
 
+    struct epoll_event events[EPOLL_MAX_EVENTS];
+
     while (g_running) {
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(fd, &rfds);
-
-        struct timeval tv = { .tv_sec = POLL_TIMEOUT_SEC, .tv_usec = 0 };
-
-        int ready = select(fd + 1, &rfds, NULL, NULL, &tv);
-        if (ready < 0) {
+        int n = epoll_wait(epfd, events, EPOLL_MAX_EVENTS, POLL_TIMEOUT_MS);
+        if (n < 0) {
             if (errno == EINTR) {
                 continue;
             }
-            fprintf(stderr, "select 失败: %s\n", strerror(errno));
+            fprintf(stderr, "epoll_wait 失败: %s\n", strerror(errno));
             break;
         }
-        if (ready == 0) {
+        if (n == 0) {
             /* 超时：MCU 正常情况下每秒都会来一帧，此处可做离线检测 */
             continue;
         }
 
-        sensor_poll(fd); /* 取数据 + 分帧 + 解析数值 */
+        for (int i = 0; i < n; i++) {
+            if (events[i].data.fd == fd) {
+                sensor_poll(fd); /* 取数据 + 分帧 + 解析数值 */
+            }
+        }
     }
 
     printf("退出：共收到 %llu 字节，解析 %llu 帧，异常 %llu 次\n",
@@ -111,6 +139,7 @@ int main(int argc, char *argv[])
         printf("最后一帧数值 = %g\n", value);
     }
 
+    close(epfd);
     serial_close(fd);
     return 0;
 }
