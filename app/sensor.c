@@ -29,9 +29,17 @@ static int g_out_of_range;
 /* 越界上报回调，由外部（阶段二的 MQTT 层）注册 */
 static sensor_alert_fn g_alert_fn;
 
+/* 恢复上报回调，与告警成对 */
+static sensor_recover_fn g_recover_fn;
+
 void sensor_set_alert_fn(sensor_alert_fn fn)
 {
     g_alert_fn = fn;
+}
+
+void sensor_set_recover_fn(sensor_recover_fn fn)
+{
+    g_recover_fn = fn;
 }
 
 void sensor_set_threshold(double nominal, double tolerance)
@@ -70,7 +78,7 @@ static void rx_align(void)
 }
 
 /* 越界判定：数值不在 [额定值 - 波动, 额定值 + 波动] 内就触发上报。
- * 只在状态翻转的那一刻上报一次：恢复正常后状态清零，下次越界再报。 */
+ * 只在状态翻转的那一刻报一次：进越界发告警、回范围发恢复，成对出现。 */
 static void check_range(void)
 {
     double low  = g_nominal - g_tolerance;
@@ -84,6 +92,8 @@ static void check_range(void)
 
     if (bad && g_alert_fn != NULL) {
         g_alert_fn(g_value, low, high);
+    } else if (!bad && g_recover_fn != NULL) {
+        g_recover_fn(g_value, low, high);
     }
 }
 

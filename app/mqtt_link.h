@@ -24,8 +24,9 @@ void mqtt_link_on_readable(void);
 /* 每次主循环迭代都要调用：跑心跳、按需重连、把排队的数据写出去 */
 void mqtt_link_tick(void);
 
-/* 越界上报：publish 一条事件 JSON 到 edge/<node_id>/event */
+/* 事件上报（告警 / 恢复成对）：publish 事件 JSON 到 edge/<node_id>/event，QoS 1 */
 void mqtt_link_publish_alert(double value, double low, double high);
+void mqtt_link_publish_recovered(double value, double low, double high);
 
 /* 心跳遥测：publish 当前温度与状态到 edge/<node_id>/telemetry，QoS 0。
  * 返回 1 表示已发出，0 表示未连接跳过（周期覆盖，等下一条即可） */

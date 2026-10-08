@@ -55,6 +55,13 @@ static void on_temp_alert(double value, double low, double high)
     mqtt_link_publish_alert(value, low, high);
 }
 
+/* 恢复上报：与告警成对，通知上位机关闭告警条目 */
+static void on_temp_recover(double value, double low, double high)
+{
+    fprintf(stderr, "[恢复] 数值 %g 回到 [%g, %g] 内\n", value, low, high);
+    mqtt_link_publish_recovered(value, low, high);
+}
+
 static void usage(const char *prog)
 {
     fprintf(stderr,
@@ -95,6 +102,7 @@ int main(int argc, char *argv[])
     install_signal_handlers();
 
     sensor_set_alert_fn(on_temp_alert);
+    sensor_set_recover_fn(on_temp_recover);
 
     struct serial_config cfg = {
         .device   = device,

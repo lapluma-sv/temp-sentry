@@ -223,7 +223,9 @@ void mqtt_link_tick(void)
     mosquitto_loop_write(g_mosq, 1);
 }
 
-void mqtt_link_publish_alert(double value, double low, double high)
+/* 事件上报公共实现：告警 / 恢复只是事件名和等级不同 */
+static void publish_event(const char *event, const char *level,
+                          double value, double low, double high)
 {
     if (g_mosq == NULL) {
         return;
@@ -233,8 +235,8 @@ void mqtt_link_publish_alert(double value, double low, double high)
         return;
     }
 
-    /* 回调只给了上下限，还原成上位机要的额定值 / 波动 */
-    double standard  = (low + high) / 2.0;
+    /* 回调只给了上下限，还原成判定用的额定值 / 波动 */
+    double nominal   = (low + high) / 2.0;
     double tolerance = (high - low) / 2.0;
 
     struct timespec ts;
@@ -243,9 +245,9 @@ void mqtt_link_publish_alert(double value, double low, double high)
 
     char payload[PAYLOAD_MAX];
     int n = snprintf(payload, sizeof(payload),
-                     "{\"event\":\"temp_violation\",\"standard\":%.1f,"
+                     "{\"event\":\"%s\",\"level\":\"%s\",\"nominal\":%.1f,"
                      "\"tolerance\":%.1f,\"measured\":%.2f,\"ts\":%lld}",
-                     standard, tolerance, value, ts_ms);
+                     event, level, nominal, tolerance, value, ts_ms);
     if (n < 0 || (size_t)n >= sizeof(payload)) {
         return;
     }
@@ -258,6 +260,18 @@ void mqtt_link_publish_alert(double value, double low, double high)
 
     printf("[MQTT] 已上报 %s: %s\n", g_topic_event, payload);
     fflush(stdout);
+}
+
+/* 越界告警：进入越界状态的那一刻触发 */
+void mqtt_link_publish_alert(double value, double low, double high)
+{
+    publish_event("temp_violation", "error", value, low, high);
+}
+
+/* 恢复事件：回到范围内的那一刻触发，与告警成对，上位机据此关闭告警 */
+void mqtt_link_publish_recovered(double value, double low, double high)
+{
+    publish_event("temp_recovered", "info", value, low, high);
 }
 
 /* 心跳遥测：当前温度 + 状态，QoS 0，丢了等下一条；未连接时静默跳过 */

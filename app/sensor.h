@@ -8,8 +8,14 @@
 /* 越界上报接口：本层只负责判定，具体怎么上报（阶段二走 MQTT publish）由外部注册 */
 typedef void (*sensor_alert_fn)(double value, double low, double high);
 
+/* 恢复上报接口：从越界回到范围内时触发，与告警成对 */
+typedef void (*sensor_recover_fn)(double value, double low, double high);
+
 /* 注册越界上报回调；传 NULL 表示不上报 */
 void sensor_set_alert_fn(sensor_alert_fn fn);
+
+/* 注册恢复上报回调；传 NULL 表示不上报 */
+void sensor_set_recover_fn(sensor_recover_fn fn);
 
 /* 更新判定阈值：正常范围变成 [nominal - tolerance, nominal + tolerance]。
  * 阶段二由上位机通过 MQTT 下发参数时调用 */
