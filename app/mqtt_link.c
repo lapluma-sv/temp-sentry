@@ -4,6 +4,7 @@
 #include "sensor.h"
 
 #include <errno.h>
+#include <math.h>
 #include <mosquitto.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,11 +138,15 @@ static void on_message(struct mosquitto *mosq, void *userdata,
 
     double nominal = 0.0;
     double tolerance = 0.0;
-    if (json_get_number(body, "nominal", &nominal) &&
-        json_get_number(body, "tolerance", &tolerance)) {
-        sensor_set_threshold(nominal, tolerance);
-    } else {
+    if (!json_get_number(body, "nominal", &nominal) ||
+        !json_get_number(body, "tolerance", &tolerance)) {
         fprintf(stderr, "[MQTT] 下发格式不对，需要 {\"nominal\":x,\"tolerance\":y}\n");
+    } else if (!isfinite(nominal) || !isfinite(tolerance) || tolerance <= 0.0) {
+        /* 非法参数直接拒绝：tolerance <= 0 会把判定范围退化成一个点 */
+        fprintf(stderr, "[MQTT] 下发参数非法: nominal=%g tolerance=%g，需 tolerance > 0\n",
+                nominal, tolerance);
+    } else {
+        sensor_set_threshold(nominal, tolerance);
     }
     fflush(stdout);
 
