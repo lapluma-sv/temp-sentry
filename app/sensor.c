@@ -34,6 +34,15 @@ void sensor_set_alert_fn(sensor_alert_fn fn)
     g_alert_fn = fn;
 }
 
+void sensor_set_threshold(double nominal, double tolerance)
+{
+    g_nominal   = nominal;
+    g_tolerance = tolerance;
+    printf("阈值更新：额定 %g，波动 ±%g => 正常范围 [%g, %g]\n",
+           nominal, tolerance, nominal - tolerance, nominal + tolerance);
+    fflush(stdout);
+}
+
 /* 丢掉帧头 A5 A5 之前的垃圾字节；
  * 没有完整帧头时只留末尾那个 A5（可能是帧头的前一半，等下一批数据补齐） */
 static void rx_align(void)
@@ -146,6 +155,11 @@ int sensor_get_value(double *out)
         *out = g_value;
     }
     return 1;
+}
+
+int sensor_get_state(void)
+{
+    return g_out_of_range;
 }
 
 uint64_t sensor_frame_count(void)
